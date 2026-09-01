@@ -16,6 +16,12 @@ class AgentConfig(BaseModel):
     enabled: list[str] = Field(default_factory=list)
 
 
+class CopilotConfig(BaseModel):
+    enabled: bool = False
+    permission_timeout_secs: int = 240
+    idle_after_secs: int = 900
+
+
 class BrandConfig(BaseModel):
     name: str = "TAMAGOOSHI"
     tagline: str | None = None
@@ -32,6 +38,7 @@ class HubConfig(BaseModel):
     brand_id: str = "gooshi"
     brand: BrandConfig = Field(default_factory=BrandConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
+    copilot: CopilotConfig = Field(default_factory=CopilotConfig)
     default_mood: Mood = "happy"
     sources: SerializeAsAny[list[SourceConfigBase]] = Field(default_factory=list)
     moods: list[MoodRule] = Field(default_factory=list)

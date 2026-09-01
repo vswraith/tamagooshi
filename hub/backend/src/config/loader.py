@@ -45,6 +45,7 @@ def hub_config_from_manifest(data: dict, device_id: str = "sim") -> HubConfig:
             "default": agent.get("default", "cursor"),
             "enabled": agent.get("enabled") or [],
         },
+        "copilot": hub.get("copilot") or {},
         "brand": {
             "name": brand.get("name", "TAMAGOOSHI"),
             "tagline": brand.get("tagline"),
