@@ -19,7 +19,11 @@ class AgentConfig(BaseModel):
 class CopilotConfig(BaseModel):
     enabled: bool = False
     permission_timeout_secs: int = 240
-    idle_after_secs: int = 900
+    # A session only goes stale if nothing (preToolUse/postToolUse/etc) has
+    # touched it for this long - a live process refreshes it constantly, so
+    # this only fires for one that died/got killed without a chance to run
+    # its sessionEnd hook, leaving it stuck showing "running" until reaped.
+    idle_after_secs: int = 180
 
 
 class BrandConfig(BaseModel):

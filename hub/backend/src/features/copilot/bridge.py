@@ -36,7 +36,7 @@ class CopilotBridge:
     """
 
     def __init__(self, channel: LineChannel, permission_timeout_secs: int = 240,
-                 idle_after_secs: int = 900):
+                 idle_after_secs: int = 180):
         self._channel = channel
         self._permission_timeout_secs = permission_timeout_secs
         self._sessions = CopilotSessionStore(idle_after_secs)
@@ -44,6 +44,21 @@ class CopilotBridge:
         self._seq = 0
         self._loop: asyncio.AbstractEventLoop | None = None
         self._heartbeat_task: asyncio.Task | None = None
+        # The device only ever shows one pending prompt. Every snapshot line
+        # must carry it (or explicitly omit it) - the firmware codec treats
+        # a missing "prompt" key as "no active prompt" and clears the
+        # approve/deny overlay, so this has to survive heartbeat ticks too,
+        # not just the snapshot that first raised it.
+        self._active_prompt: dict | None = None
+        self._active_id: str | None = None
+        # Concurrent permission requests (from separate sessions) can't all
+        # be shown at once, so anything that arrives while one is already
+        # displayed waits its turn here, FIFO. Each request's own timeout
+        # only starts counting once it's actually shown - waiting in queue
+        # doesn't burn down its decision window before the user can see it.
+        self._queue: list[str] = []
+        self._prompts: dict[str, dict] = {}
+        self._activated: dict[str, asyncio.Event] = {}
 
     def start(self) -> None:
         self._loop = asyncio.get_running_loop()
@@ -59,6 +74,13 @@ class CopilotBridge:
             if not fut.done():
                 fut.set_result(False)
         self._pending.clear()
+        for ev in self._activated.values():
+            ev.set()
+        self._activated.clear()
+        self._queue.clear()
+        self._prompts.clear()
+        self._active_id = None
+        self._active_prompt = None
 
     def _on_line(self, line: str) -> None:
         assert self._loop is not None
@@ -130,10 +152,19 @@ class CopilotBridge:
         request_id = f"c{self._seq}"
         fut: asyncio.Future = self._loop.create_future()
         self._pending[request_id] = fut
+        self._prompts[request_id] = {
+            "id": request_id, "tool": session.current_tool,
+            "hint": _summarize_args(payload.get("toolArgs") or {}),
+        }
+        activated = asyncio.Event()
+        self._activated[request_id] = activated
 
-        hint = _summarize_args(payload.get("toolArgs") or {})
-        self._send_snapshot(prompt={"id": request_id, "tool": session.current_tool,
-                                     "hint": hint})
+        if self._active_id is None:
+            self._activate(request_id)
+        else:
+            self._queue.append(request_id)
+
+        await activated.wait()
 
         try:
             approved = await asyncio.wait_for(fut, timeout=self._permission_timeout_secs)
@@ -143,9 +174,35 @@ class CopilotBridge:
             approved = False
         finally:
             session.waiting = False
-            self._send_snapshot()
+            self._prompts.pop(request_id, None)
+            self._activated.pop(request_id, None)
+            if self._active_id == request_id:
+                if not self._advance_queue():
+                    self._send_snapshot()
+            else:
+                try:
+                    self._queue.remove(request_id)
+                except ValueError:
+                    pass
+                self._send_snapshot()
 
         return {"behavior": "allow" if approved else "deny"}
+
+    def _activate(self, request_id: str) -> None:
+        self._active_id = request_id
+        self._active_prompt = self._prompts.get(request_id)
+        activated = self._activated.get(request_id)
+        if activated is not None:
+            activated.set()
+        self._send_snapshot()
+
+    def _advance_queue(self) -> bool:
+        if self._queue:
+            self._activate(self._queue.pop(0))
+            return True
+        self._active_id = None
+        self._active_prompt = None
+        return False
 
     def _channel_disconnected(self) -> bool:
         status = getattr(self._channel, "status", None)
@@ -165,7 +222,7 @@ class CopilotBridge:
         except asyncio.CancelledError:
             pass
 
-    def _send_snapshot(self, prompt: dict | None = None) -> None:
+    def _send_snapshot(self) -> None:
         total, running, waiting = self._sessions.counts()
         entries = self._sessions.recent_entries()
         body: dict = {
@@ -176,6 +233,6 @@ class CopilotBridge:
         }
         if entries:
             body["entries"] = entries
-        if prompt is not None:
-            body["prompt"] = prompt
+        if self._active_prompt is not None:
+            body["prompt"] = self._active_prompt
         self._channel.send_line(json.dumps(body, separators=(",", ":")))

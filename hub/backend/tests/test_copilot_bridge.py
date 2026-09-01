@@ -85,6 +85,37 @@ def test_pretooluse_updates_activity_feed_without_blocking():
     asyncio.run(run())
 
 
+def test_prompt_survives_unrelated_snapshots_while_pending():
+    # Regression test: firmware clears the approve/deny overlay whenever a
+    # snapshot omits the "prompt" key (see codec.cpp), so anything sent
+    # while a request is still pending - a heartbeat tick, another hook
+    # event - must keep echoing the active prompt, not just the snapshot
+    # that first raised it.
+    async def run():
+        bridge, channel = make_bridge()
+        await start(bridge)
+
+        task = asyncio.create_task(bridge.handle_hook("permissionRequest", {
+            "sessionId": "s1", "cwd": "/repos/myrepo", "toolName": "npm install",
+        }))
+        await asyncio.sleep(0)
+        request_id = prompts(channel)[0]["id"]
+
+        bridge._send_snapshot()  # simulate a heartbeat tick firing mid-wait
+        await bridge.handle_hook("sessionStart", {"sessionId": "s2", "cwd": "/repos/other"})
+
+        assert prompts(channel)[-1]["id"] == request_id
+
+        await bridge._handle_line(json.dumps({"cmd": "permission", "id": request_id,
+                                               "decision": "once"}))
+        await task
+
+        assert prompts(channel)[-1] == prompts(channel)[-2]  # last prompt-carrying snapshot
+        assert "prompt" not in snapshots(channel)[-1]  # cleared once resolved
+
+    asyncio.run(run())
+
+
 def test_permissionrequest_raises_prompt_and_waits():
     async def run():
         bridge, channel = make_bridge()
@@ -199,5 +230,77 @@ def test_stop_resolves_pending_as_denied():
 
         result = await task
         assert result == {"behavior": "deny"}
+
+    asyncio.run(run())
+
+
+def test_second_concurrent_request_queues_until_first_resolves():
+    async def run():
+        bridge, channel = make_bridge()
+        await start(bridge)
+
+        first = asyncio.create_task(bridge.handle_hook("permissionRequest", {
+            "sessionId": "s1", "cwd": "/repos/repo-one", "toolName": "npm install",
+        }))
+        await asyncio.sleep(0)
+        second = asyncio.create_task(bridge.handle_hook("permissionRequest", {
+            "sessionId": "s2", "cwd": "/repos/repo-two", "toolName": "npm test",
+        }))
+        await asyncio.sleep(0)
+
+        # Only the first shows on the device; the second is queued, not
+        # merged into the visible prompt or lost.
+        assert prompts(channel)[-1]["tool"] == "npm install"
+        first_id = prompts(channel)[-1]["id"]
+        assert bridge._active_id == first_id
+        assert len(bridge._queue) == 1
+
+        await bridge._handle_line(json.dumps({"cmd": "permission", "id": first_id,
+                                               "decision": "once"}))
+        first_result = await first
+
+        # Second request is now shown and gets its own full decision window.
+        assert prompts(channel)[-1]["tool"] == "npm test"
+        second_id = prompts(channel)[-1]["id"]
+        assert second_id != first_id
+        assert bridge._active_id == second_id
+        assert bridge._queue == []
+
+        await bridge._handle_line(json.dumps({"cmd": "permission", "id": second_id,
+                                               "decision": "deny"}))
+        second_result = await second
+
+        assert first_result == {"behavior": "allow"}
+        assert second_result == {"behavior": "deny"}
+        assert bridge._active_id is None
+        assert "prompt" not in snapshots(channel)[-1]
+
+    asyncio.run(run())
+
+
+def test_queued_request_denied_immediately_does_not_wait_its_turn_forever():
+    # A request resolved (e.g. device disconnects mid-queue, or stop())
+    # while still queued shouldn't leave it stuck in the queue list.
+    async def run():
+        bridge, channel = make_bridge()
+        await start(bridge)
+
+        first = asyncio.create_task(bridge.handle_hook("permissionRequest", {
+            "sessionId": "s1", "cwd": "/repos/repo-one", "toolName": "npm install",
+        }))
+        await asyncio.sleep(0)
+        second = asyncio.create_task(bridge.handle_hook("permissionRequest", {
+            "sessionId": "s2", "cwd": "/repos/repo-two", "toolName": "npm test",
+        }))
+        await asyncio.sleep(0)
+        assert len(bridge._queue) == 1
+
+        await bridge.stop()
+        first_result = await first
+        second_result = await second
+
+        assert first_result == {"behavior": "deny"}
+        assert second_result == {"behavior": "deny"}
+        assert bridge._queue == []
 
     asyncio.run(run())
