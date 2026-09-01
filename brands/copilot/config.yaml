@@ -40,7 +40,7 @@ hub:
   copilot:
     enabled: true
     permission_timeout_secs: 240
-    idle_after_secs: 900
+    idle_after_secs: 180
   sources: []
   moods: []
   alerts: []

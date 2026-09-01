@@ -25,7 +25,7 @@ class CopilotSessionStore:
     haven't sent an event in idle_after_secs.
     """
 
-    def __init__(self, idle_after_secs: int = 900):
+    def __init__(self, idle_after_secs: int = 180):
         self._idle_after_secs = idle_after_secs
         self._sessions: dict[str, CopilotSession] = {}
 
