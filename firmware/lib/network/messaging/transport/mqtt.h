@@ -1,5 +1,5 @@
 #pragma once
-#if defined(TAMA_PROTO_MQTT)
+#if defined(TAMA_PROTO_MQTT) || defined(TAMA_ENABLE_HA_MQTT)
 
 #include <espMqttClient.h>
 

@@ -1,5 +1,5 @@
 #include "mqtt.h"
-#if defined(TAMA_PROTO_MQTT)
+#if defined(TAMA_PROTO_MQTT) || defined(TAMA_ENABLE_HA_MQTT)
 
 #include <Arduino.h>
 

@@ -70,10 +70,11 @@ def _select_device(device, transports_override):
     apps = _without_hid(apps, registry.apps, spec)
 
     buddy = bool((device.get("buddy") or {}).get("enabled", True)) and "ble" in spec
+    homeassistant = bool((device.get("homeassistant") or {}).get("enabled", False))
     tz_offset_min = tz_minutes(device.get("timezone"))
 
     return (themes, default_theme, typefaces, default_typeface,
-            games, apps, spec, buddy, tz_offset_min)
+            games, apps, spec, buddy, homeassistant, tz_offset_min)
 
 
 def _hid_kinds(games, apps):
@@ -111,10 +112,18 @@ def generate(brand_id, brands_dir, out_dir, transports_override=None):
 
     ids, customs, persona, default_mascot, default_mood = _select_cast(device)
     (themes, default_theme, typefaces, default_typeface,
-     games, apps, spec, buddy, tz_offset_min) = _select_device(device, transports_override)
+     games, apps, spec, buddy, homeassistant, tz_offset_min) = _select_device(
+        device, transports_override)
 
     _emit(out_dir, brand_id, data, base_dir, ids, customs, persona,
           default_mascot, default_theme, default_typeface, default_mood,
           themes, typefaces, tz_offset_min, games, apps, buddy)
 
-    return transport_macros(spec) + registry.hid_macros(games, apps)
+    # homeassistant is a side-channel WiFi/MQTT publisher, independent of the
+    # hub transport chosen by transport_macros(spec) - it must never change
+    # which transport wins as the hub/agent-channel carrier for `spec`, so
+    # it's unioned in afterward rather than folded into transport selection.
+    macros = set(transport_macros(spec)) | set(registry.hid_macros(games, apps))
+    if homeassistant:
+        macros |= {"TAMA_ENABLE_WIFI", "TAMA_ENABLE_HA_MQTT"}
+    return sorted(macros)

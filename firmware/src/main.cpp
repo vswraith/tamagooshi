@@ -62,8 +62,12 @@
 #include "wifi/softap.h"
 #include "wifi/wifi.h"
 #endif
-#if defined(TAMA_PROTO_MQTT)
+#if defined(TAMA_PROTO_MQTT) || defined(TAMA_ENABLE_HA_MQTT)
 #include "transport/mqtt.h"
+#endif
+#if defined(TAMA_ENABLE_HA_MQTT)
+#include "homeassistant/publisher.h"
+#include "homeassistant/topics.h"
 #endif
 
 using namespace tama;
@@ -150,6 +154,19 @@ static ITransport& g_hubTransport = g_hub;
 static HubPipeline g_hubPipeline(g_hubTransport, g_codec, g_runtime.router(), g_board, g_deviceId,
                                  TAMA_FW_VERSION);
 
+#if defined(TAMA_ENABLE_HA_MQTT)
+// Independent side-channel to Home Assistant's MQTT broker - a second,
+// distinct MqttTransport/client id, deliberately not part of ChannelBinding
+// (see configureChannels below): this never carries the hub or agent
+// channel, so it can't affect the BLE link to the Copilot hub either way.
+static const std::string g_haClientId = g_deviceId + "-ha";
+static const std::string g_haAvailTopic = ha_topics::availability(g_deviceId);
+static MqttTransport g_haMqtt(g_wifi, TAMA_MQTT_HOST, TAMA_MQTT_PORT, g_haClientId,
+                              g_haAvailTopic, "offline");
+static HaPublisher g_haPublisher(g_haMqtt, g_runtime.state(), g_deviceId, TAMA_PRODUCT_NAME,
+                                 TAMA_FW_VERSION);
+#endif
+
 static void configureChannels() {
   auto hubResolver = makeHubResolver(g_hubTransport, g_codec, g_deviceId);
 
@@ -228,6 +245,9 @@ void setup() {
   if (seed.valid() && g_networks.all().empty()) g_networks.remember(seed);
   g_wifi.begin();
 #endif
+#if defined(TAMA_ENABLE_HA_MQTT)
+  g_haPublisher.begin();
+#endif
 #if defined(TAMA_ENABLE_BLE)
   g_ble.begin();
 #endif
@@ -248,6 +268,9 @@ void loop() {
   g_runtime.loop(millis());
 #if defined(TAMA_ENABLE_WIFI)
   g_wifi.loop();
+#endif
+#if defined(TAMA_ENABLE_HA_MQTT)
+  g_haPublisher.loop(millis());
 #endif
   delay(5);
 }

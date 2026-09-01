@@ -32,6 +32,8 @@ device:
     enabled: [clock, stopwatch, flashlight, about]
   buddy:
     enabled: true
+  homeassistant:
+    enabled: true
 
 hub:
   agent:
