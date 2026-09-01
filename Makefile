@@ -1,4 +1,4 @@
-.PHONY: help hub up down logs hub-sim hub-test sim sim-live brand macos dmg
+.PHONY: help hub up down logs hub-sim hub-test hub-install-copilot-hooks sim sim-live brand macos dmg
 
 BROKER ?= localhost:1883
 export TAMA_BRAND ?= gooshi
@@ -17,6 +17,7 @@ help:
 	@echo "  make logs      # tail dev stack hub logs"
 	@echo "  make hub-sim TAMA_BRAND=<id>  # hub over MQTT for the simulator (needs a broker on $(BROKER))"
 	@echo "  make hub-test  # hub unit tests"
+	@echo "  make hub-install-copilot-hooks  # one-time: register the Copilot CLI hook (needs TAMA_BRAND=copilot)"
 	@echo "  make brand TAMA_BRAND=<id>  # generate a brand's firmware headers into firmware/.gen/current"
 	@echo "  make macos     # build the Mac menu bar app into build/Tamagooshi.app"
 	@echo "  make dmg       # package the app as build/Tamagooshi-<version>.dmg"
@@ -38,6 +39,9 @@ hub-sim:
 
 hub-test:
 	cd hub/backend && python -m pytest
+
+hub-install-copilot-hooks:
+	cd hub/backend && python -m src.features.copilot.install_hooks
 
 sim:
 	cd firmware && pio run -e native_sim -t exec

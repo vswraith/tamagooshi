@@ -12,6 +12,7 @@ from .api import (
     brands_router,
     config_router,
     connection_router,
+    copilot_router,
     events_router,
     flash_router,
     mount_ui,
@@ -24,6 +25,7 @@ from .config import BrandService, HubConfig, default_catalog, load_config
 from .config.secrets import apply_secrets
 from .config.settings import load_connection
 from .features.buddy import create_bridge
+from .features.copilot import create_copilot_bridge
 from .network import InboundRegistry, InboundRouter, Publisher
 from .network.transport import create_transport
 from .services.events import EventBus
@@ -69,7 +71,12 @@ def create_app(config: HubConfig | None = None) -> FastAPI:
         router.on("page.ack", lambda _topic, env: pipeline.acknowledge(env))
         publisher.on_inbound(router.handle)
 
-        bridge = create_bridge(transport, config.agent)
+        # A brand enables at most one of these: copilot tracking claims the
+        # buddy line channel outright when configured, otherwise voice chat
+        # (Claude/Cursor/Hermes) gets it. LineChannel only supports one
+        # subscriber, so this choice is exclusive by construction.
+        copilot_bridge = create_copilot_bridge(transport, config.copilot)
+        bridge = copilot_bridge or create_bridge(transport, config.agent)
         if bridge is not None:
             bridge.start()
 
@@ -85,6 +92,7 @@ def create_app(config: HubConfig | None = None) -> FastAPI:
         app.state.pipeline = pipeline
         app.state.worker = worker
         app.state.bridge = bridge
+        app.state.copilot_bridge = copilot_bridge
         app.state.flasher = Flasher(lambda data: bus.publish("flash", data))
         try:
             yield
@@ -107,6 +115,7 @@ def create_app(config: HubConfig | None = None) -> FastAPI:
     app.include_router(rules_router)
     app.include_router(config_router)
     app.include_router(connection_router)
+    app.include_router(copilot_router)
     app.include_router(flash_router)
     mount_ui(app)
     return app

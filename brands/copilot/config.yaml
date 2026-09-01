@@ -1,0 +1,42 @@
+brand:
+  id: copilot
+  name: COPILOT
+  mascot: Copilot
+  tagline: Your pair, on your desk
+  website: github.com/features/copilot
+  logo: logo.png
+
+device:
+  transports:
+    ble: gatt
+  theme:
+    custom:
+      - name: violet
+        colors: {surface: "#1D1330", ink: "#F3EEFC", accent: "#C652B3"}
+    default: violet
+    enabled: [violet]
+  typeface:
+    default: dejavu
+    enabled: [dejavu, pixel]
+  mascot:
+    default: copilot
+    mood: happy
+    enabled: [copilot]
+  games:
+    enabled: [runner, flappy, delivery]
+  apps:
+    enabled: [clock, stopwatch, flashlight, about]
+  buddy:
+    enabled: true
+
+hub:
+  agent:
+    default: "off"
+    enabled: []
+  copilot:
+    enabled: true
+    permission_timeout_secs: 240
+    idle_after_secs: 900
+  sources: []
+  moods: []
+  alerts: []
