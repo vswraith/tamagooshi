@@ -19,9 +19,13 @@ device:
     default: dejavu
     enabled: [dejavu, pixel]
   mascot:
-    default: copilot
-    mood: happy
-    enabled: [copilot]
+    custom:
+      - id: ghcopilot
+        label: Copilot
+        source: mascot-source.png
+    default: ghcopilot
+    mood: neutral
+    enabled: [ghcopilot]
   games:
     enabled: [runner, flappy, delivery]
   apps:
