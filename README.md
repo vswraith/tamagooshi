@@ -77,10 +77,33 @@ TAMA_BRAND=<id> pio run -e m5sticks3 -t upload   # or m5stickc-plus, m5stickc-pl
 Runs on the machine and communicates with the device over BLE. `TAMA_BRAND` selects the brand config.
 
 ```bash
-pip install -e "hub/backend[voice,claude,cursor]"   # once, Python 3.10+, extras optional
+python3 -m venv .venv && source .venv/bin/activate   # once; re-run `source .venv/bin/activate`
+                                                       # in every new terminal before `make hub`
+pip install -e "hub/backend[voice,claude,cursor]"     # once, Python 3.10+, extras optional
 make hub TAMA_BRAND=<id>          # pairs with your device over BLE
 make hub-test                     # hub unit tests
 ```
+
+`make hub` (and every other `make hub-*` target) just runs plain `python`, so the venv must be
+active in that terminal first — otherwise it fails with `ModuleNotFoundError`.
+
+#### GitHub Copilot brand (`TAMA_BRAND=copilot`)
+
+The `copilot` brand tracks local GitHub Copilot CLI/app sessions instead of voice chat: live
+session status plus approve/deny of tool-permission requests, shown on the device. No extra pip
+extras needed (it only uses the hub's base dependencies). One-time setup registers a
+[Copilot CLI hook](https://docs.github.com/en/copilot/concepts/agents/hooks) that talks to the hub
+over localhost:
+
+```bash
+source .venv/bin/activate                 # if not already active in this terminal
+make hub-install-copilot-hooks            # once, writes ~/.copilot/hooks/tamagooshi.json
+make hub TAMA_BRAND=copilot               # run the hub; pairs with your device over BLE
+```
+
+With the hub running, use `copilot`/`gh copilot` in any terminal as normal — the device shows the
+live activity feed, and pauses with an approve/deny prompt whenever Copilot actually needs a
+permission decision.
 
 <p align="left">
   <picture>

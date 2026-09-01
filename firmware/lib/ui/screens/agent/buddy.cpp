@@ -72,7 +72,7 @@ class BuddyScreen : public AppScreen {
     const int maxY = L.bottom - (hasTokens ? 16 : 2);
 
     if (b.phase == BuddyPhase::Offline || b.phase == BuddyPhase::Idle) {
-      renderQuiet(g, b, colCx, colW, y);
+      renderQuiet(g, b, ctx.state.branding.name, colCx, colW, y);
     } else {
       renderActive(g, b, colCx, col, colW, y, maxY);
     }
@@ -94,15 +94,17 @@ class BuddyScreen : public AppScreen {
   uint32_t redrawPeriodMs() const override { return 60; }
 
  private:
-  void renderQuiet(Gfx& g, const BuddyState& b, int cx, int colW, int y) {
+  void renderQuiet(Gfx& g, const BuddyState& b, const std::string& productName,
+                    int cx, int colW, int y) {
     if (!b.owner.empty()) {
       const std::string hi = "hi " + b.owner;
       g.str(hi.c_str(), cx, y, theme::kFg, typeface::body(), textdatum_t::top_center);
       y += 18;
     }
-    const char* line = b.phase == BuddyPhase::Offline ? "connect Claude and I'll wake up"
-                                                      : "waiting for something to do";
-    widgets::wrapText(g, line, cx, y, colW, typeface::micro(), theme::kDim, 11);
+    const std::string line = b.phase == BuddyPhase::Offline
+                                  ? "connect " + productName + " and I'll wake up"
+                                  : "waiting for something to do";
+    widgets::wrapText(g, line.c_str(), cx, y, colW, typeface::micro(), theme::kDim, 11);
   }
 
   void renderActive(Gfx& g, const BuddyState& b, int cx, int colX, int colW, int y, int maxY) {
